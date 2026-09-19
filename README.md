@@ -41,10 +41,12 @@ g++ packer.cpp src/spk_packer.cpp src/lodepng.cpp -o spk_packer.exe -O2 -static-
 
 ### ② 编译 Lua 扩展 sprite_loader.dll
 
+```shell
+g++ -shared sprite_loader.cpp -o sprite_loader.dll -I"XXX\lua-5.1.4\src" -L"XXX\love-11.5-win64" -llua51 -static-libgcc -std=c++17 -Wl,--enable-auto-import
+```
 修改 `-I` / `-L` 路径为你本地 lua5.1 源码与 love 库路径
 
 ## 方式 2：CMake 编译
 
 > 推荐使用 MinGW-w64 + CMake，一键构建打包器与 dll，无需手动维护编译命令。
 > 要求：CMake >=3.16，MinGW-w64 工具链。
-
