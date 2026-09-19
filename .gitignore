@@ -1,0 +1,5 @@
+build
+*.exe
+images
+tar.gz
+*.dll
