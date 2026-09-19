@@ -1,5 +1,7 @@
 build
 *.exe
 images
-tar.gz
+*.tar.gz
 *.dll
+*.png
+*.spk
