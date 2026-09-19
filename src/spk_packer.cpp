@@ -55,6 +55,37 @@ struct PackResourceGuard
     PackResourceGuard& operator=(const PackResourceGuard&) = delete;
 };
 
+void red_to_green_palette(uint8_t* rgba_data, size_t pixel_count)
+{
+    const uint8_t red_threshold = 80; // R超过这个值才判定为红色，可以调
+    const int diff_threshold = 30;   // R比G、B高出多少才算红色系
+
+    for(size_t i = 0; i < pixel_count; ++i)
+    {
+        size_t off = i * 4;
+        uint8_t R = rgba_data[off + 0];
+        uint8_t G = rgba_data[off + 1];
+        uint8_t B = rgba_data[off + 2];
+        uint8_t A = rgba_data[off + 3];
+
+        // 判定：红色系：R足够大，并且R显著大于G和B
+        bool is_red = (R > red_threshold) && (R > G + diff_threshold) && (R > B + diff_threshold);
+        if(is_red)
+        {
+            // 映射方案：红→绿，原来的绿→蓝，红色压低；亮度尽量不变
+            uint8_t newR = R / 4;
+            uint8_t newG = R;
+            uint8_t newB = G;
+
+            rgba_data[off + 0] = newR;
+            rgba_data[off + 1] = newG;
+            rgba_data[off + 2] = newB;
+            rgba_data[off + 3] = A; // alpha保持不变
+        }
+        // 不是红色系：什么都不做，保留原色
+    }
+}
+
 // 读取pos.txt，按顺序返回偏移对，行数不足填充(0,0)
 static std::vector<std::pair<int32_t, int32_t>> load_pos_list(const std::string& input_dir, int expect_count)
 {
@@ -77,7 +108,56 @@ static std::vector<std::pair<int32_t, int32_t>> load_pos_list(const std::string&
     return pos_list;
 }
 
-int pack_sprites_to_spk(const std::string& input_dir, const std::string& output_spk_path)
+void channel_replace(uint8_t* rgba_data,
+                     size_t pixel_count,
+                     Channel src_channel,
+                     Channel dst_channel,
+                     uint8_t threshold)
+{
+    if (src_channel == dst_channel)
+    {
+        // 源和目标是同一个通道，不需要处理
+        return;
+    }
+
+    size_t src_idx = static_cast<size_t>(src_channel);
+    size_t dst_idx = static_cast<size_t>(dst_channel);
+
+    for (size_t i = 0; i < pixel_count; ++i)
+    {
+        size_t px_base = i * 4;
+        uint8_t src_val = rgba_data[px_base + src_idx];
+
+        if (src_val > threshold)
+        {
+            rgba_data[px_base + dst_idx] = src_val;
+            rgba_data[px_base + src_idx] = 0;
+        }
+    }
+}
+
+bool save_png(const std::string& out_path, const std::vector<uint8_t>& rgba, uint32_t w, uint32_t h)
+{
+    std::vector<uint8_t> png_out;
+    unsigned err = lodepng::encode(png_out, rgba.data(), w, h);
+    if (err != 0)
+    {
+        printf("PNG encode error %s: %s\n", out_path.c_str(), lodepng_error_text(err));
+        return false;
+    }
+    FILE* fp = fopen(out_path.c_str(), "wb");
+    if (!fp)
+    {
+        printf("Failed open output png: %s\n", out_path.c_str());
+        return false;
+    }
+    fwrite(png_out.data(), 1, png_out.size(), fp);
+    fclose(fp);
+    printf("Saved png -> %s\n", out_path.c_str());
+    return true;
+}
+
+int pack_sprites_to_spk(const std::string& input_dir, const std::string& output_spk_path,bool export_modified_png)
 {
     file_manager fm;
     std::vector<std::string> png_files;
@@ -134,6 +214,17 @@ int pack_sprites_to_spk(const std::string& input_dir, const std::string& output_
         {
             printf("Decode error %s: %s\n", file_name, lodepng_error_text(err));
             return 1;
+        }
+
+        // ============ 插入颜色转换 ============
+        uint8_t* data_ptr = rgba.data();
+        size_t pixel_cnt = w * h;
+        channel_replace(data_ptr, pixel_cnt, Channel::R, Channel::B, 100);
+        if(export_modified_png)
+        {
+            std::string png_out_dir = "./output_png/";
+            std::string out_png_path = combinePath(png_out_dir, png_files[i]);
+            save_png(out_png_path, rgba, w, h);
         }
 
         // ========== Love2D 垂直翻转，需要就取消注释 ==========

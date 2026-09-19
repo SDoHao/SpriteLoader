@@ -13,6 +13,6 @@ int main(int argc, char** argv)
     printf("Current path: %s\n", file_manager{}.getCurrentDirectory().c_str());
     printf("Input path: %s\n", input_path.c_str());
 
-    int ret = pack_sprites_to_spk(input_path, "sprites.spk");
+    int ret = pack_sprites_to_spk(input_path, "sprites.spk",false);
     return ret;
 }

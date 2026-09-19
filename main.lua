@@ -1,5 +1,5 @@
 local sprite = require("sprite_loader")
-local spk_path = "sprites.spk"
+local spk_path = "build/sprites.spk"
 local cache = {}
 local spkLoader = {}
 local pngLoadTime = 0
@@ -78,6 +78,7 @@ local function loadPNGFrames()
     print(string.format("PNG loaded count: %d, time: %.2f ms",#pngList, costMs))
     pngLoadTime = costMs
 end
+
 local spkArr
 local frame = 1
 local timer = 0
@@ -104,6 +105,7 @@ function love.load()
     end
     print("================================\n")
 end
+
 function love.update(dt)
     timer = timer + dt
     if(timer > 0.1)then

@@ -7,6 +7,13 @@
 #include <vector>
 #include <regex>
 
+enum class Channel
+{
+    R = 0,
+    G = 1,
+    B = 2,
+    A = 3
+};
 
 inline bool comparePngName(const std::string& a, const std::string& b)
 {
@@ -38,6 +45,26 @@ struct SpriteEntry
  * @param output_spk_path 输出spk文件路径
  * @return 0成功，非0失败
  */
-int pack_sprites_to_spk(const std::string& input_dir, const std::string& output_spk_path);
+int pack_sprites_to_spk(const std::string& input_dir, const std::string& output_spk_path,bool export_modified_png);
+
+/**
+ * @brief 将RGBA8888像素数据保存为PNG文件
+ * @param out_path 输出png完整路径
+ * @param rgba 像素buffer RGBA8888
+ * @param w 宽度
+ * @param h 高度
+ * @return true成功，false失败
+ */
+bool save_png(const std::string& out_path, const std::vector<uint8_t>& rgba, uint32_t w, uint32_t h);
+
+/**
+ * @brief 通道替换：源通道数值 > threshold 的像素，把源通道颜色写入目标通道
+ * @param rgba_data RGBA8888像素缓冲区
+ * @param pixel_count 像素总数 = w * h
+ * @param src_channel 源通道枚举
+ * @param dst_channel 目标通道枚举
+ * @param threshold 阈值(0~255)：src通道值大于该阈值才执行替换
+ */
+void channel_replace(uint8_t* rgba_data,size_t pixel_count,Channel src_channel,Channel dst_channel,uint8_t threshold);
 
 #endif
