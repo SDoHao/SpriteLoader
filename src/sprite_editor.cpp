@@ -12,6 +12,7 @@
 #include "imgui_impl_opengl3.h"
 #include <GLFW/glfw3.h>
 #include <cstdio>
+#include <cstring>
 
 #include "editor_common.h"
 #include "editor_config.h"
@@ -23,6 +24,10 @@
 
 int gCur = 0;          // 当前帧(0基)
 bool gOnion = true;    // 洋葱皮开关
+bool gPlaying = false; // 播放中
+int  gFps = 10;        // 播放帧率
+bool gLoop = true;     // 是否循环播放
+static float gPlayTimer = 0.f;
 
 static void buildUI() {
     ImGuiIO& io = ImGui::GetIO();
@@ -45,15 +50,32 @@ static void buildUI() {
     {
         if (ImGui::Button("选择并加载目录")) {
             std::string d;
-            if (pickFolder(d)) { if (loadDir(d)) { gDir = d; saveConfig(); } }
+            if (pickFolder(d, gDir)) { if (loadDir(d)) { gDir = d; saveConfig(); } }
         }
         ImGui::TextWrapped("源目录: %s", gDir.c_str());
+        if (ImGui::Button("手动选择 pos.txt")) {
+            std::string f;
+            if (pickFile(f, gDir)) {
+                gPosPath = f;
+                // 已加载过就立即用新的 pos.txt 重新读一遍位置
+                if (!gFrames.empty() && !gDir.empty()) loadDir(gDir);
+            }
+        }
+        if (!gPosPath.empty())
+            ImGui::TextWrapped("pos.txt: %s", gPosPath.c_str());
+        else
+            ImGui::TextWrapped("pos.txt: 用目录内");
         ImGui::Separator();
-        if (ImGui::Button("选择输出目录")) { if (pickFolder(gOutDir)) saveConfig(); }
+        if (ImGui::Button("选择输出目录")) { if (pickFolder(gOutDir, gOutDir)) saveConfig(); }
         ImGui::TextWrapped("输出: %s", gOutDir.c_str());
         ImGui::BeginDisabled(gFrames.empty() || gOutDir.empty());
-        if (ImGui::Button("保存 PNG + pos.txt")) saveAllToDir(gOutDir);
+        // 重新打包：文件名输入（没带 .spk 自动补后缀）+ 打包按钮
+        static char spkNameBuf[256] = "";
+        if (spkNameBuf[0] == '\0') strncpy(spkNameBuf, gSpkName.c_str(), sizeof(spkNameBuf) - 1);
+        ImGui::SetNextItemWidth(-1.f);
+        if (ImGui::InputText("SPK 文件名", spkNameBuf, sizeof(spkNameBuf))) gSpkName = spkNameBuf;
         if (ImGui::Button("重新打包 sprites.spk")) writeSpkToDir(gOutDir);
+        if (ImGui::Button("保存 PNG + pos.txt")) saveAllToDir(gOutDir);
         ImGui::EndDisabled();
 
         if (gFrames.empty()) {
@@ -152,15 +174,23 @@ static void buildUI() {
     }
     ImGui::End();
 
-    // ===== 底部小窗：帧控制（两行）+ 缩放 =====
-    ImGui::SetNextWindowPos(ImVec2((disp.x - 720.f) * 0.5f, disp.y - 8 - 70), ImGuiCond_FirstUseEver);
+    // ===== 底部小窗：帧控制（三行）+ 缩放 =====
+    ImGui::SetNextWindowPos(ImVec2((disp.x - 720.f) * 0.5f, disp.y - 8 - 96), ImGuiCond_FirstUseEver);
     ImGui::Begin("帧控制", nullptr, ImGuiWindowFlags_NoCollapse);
     {
-        // 第一行：帧滑块 / 上一帧 / 下一帧 / 输入(紧凑)
+        // 第一行：帧率 + 循环
+        ImGui::SetNextItemWidth(70.f);
+        if (ImGui::InputInt("帧率", &gFps)) { if (gFps < 1) gFps = 1; }
+        ImGui::SameLine(0, 24);
+        ImGui::Checkbox("循环", &gLoop);
+
+        // 第二行：帧滑块 / 上一帧 / 播放 / 下一帧 / 输入(紧凑)
         ImGui::SetNextItemWidth(150.f);
         if (ImGui::SliderInt("##frameslider", &gCur, 0, (int)gFrames.size() - 1, "帧 %d")) gPreviewTexValid = false;
         ImGui::SameLine();
         if (ImGui::Button("< 上一帧")) { gCur = (gCur - 1 + (int)gFrames.size()) % (int)gFrames.size(); gPreviewTexValid = false; }
+        ImGui::SameLine();
+        if (ImGui::Button(gPlaying ? "暂停" : "播放")) { gPlaying = !gPlaying; }
         ImGui::SameLine();
         if (ImGui::Button("下一帧 >")) { gCur = (gCur + 1) % (int)gFrames.size(); gPreviewTexValid = false; }
         ImGui::SameLine();
@@ -173,7 +203,7 @@ static void buildUI() {
             gPreviewTexValid = false;
         }
 
-        // 第二行：缩放滑块 / 洋葱皮
+        // 第三行：缩放滑块 / 洋葱皮
         ImGui::SetNextItemWidth(220.f);
         ImGui::SliderFloat("##zoom", &gZoom, 10.f, 400.f, "缩放 %.0f%%");
         ImGui::SameLine(0, 24);
@@ -224,6 +254,26 @@ int main() {
         ImGui::NewFrame();
 
         updatePreview();
+
+        // 播放：按帧率推进当前帧
+        if (gPlaying && !gFrames.empty()) {
+            gPlayTimer += io.DeltaTime;
+            float interval = (gFps > 0) ? 1.f / (float)gFps : 0.1f;
+            while (gPlayTimer >= interval) {
+                gPlayTimer -= interval;
+                if (gCur + 1 < (int)gFrames.size()) {
+                    gCur++;
+                } else if (gLoop) {
+                    gCur = 0;
+                } else {
+                    gCur = (int)gFrames.size() - 1;
+                    gPlaying = false;
+                    gPlayTimer = 0.f;
+                    break;
+                }
+                gPreviewTexValid = false;
+            }
+        }
 
         // 撤销 / 重做快捷键
         if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_Z, false)) { if (io.KeyShift) doRedo(); else doUndo(); }

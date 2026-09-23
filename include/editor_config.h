@@ -8,4 +8,7 @@ extern std::string gOutDir;   // 输出目录
 std::string cfgPath();                    // 配置文件完整路径（exe 同目录 sprite_editor.cfg）
 void saveConfig();                        // 把当前目录写进 cfg
 void loadConfig();                        // 启动时读 cfg
-bool pickFolder(std::string& out);        // Windows 目录选择对话框
+// Windows 目录选择对话框；initial 非空时让对话框默认定位到该目录
+bool pickFolder(std::string& out, const std::string& initial = "");
+// Windows 文件选择对话框（默认过滤 *.txt）；initial 非空时定位到该目录
+bool pickFile(std::string& out, const std::string& initial = "");

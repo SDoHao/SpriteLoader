@@ -14,6 +14,10 @@
 
 // gFrames 的定义（extern 声明在 editor_common.h）
 std::vector<Frame> gFrames;
+// 输出 spk 文件名（定义在 loader，UI 里用输入框改）
+std::string gSpkName = "sprites";
+// 手动指定的 pos.txt（空=用目录内 pos.txt）
+std::string gPosPath;
 
 // file_manager 没有提供文件内容读写接口，这里用 fopen 读原始字节
 static bool readFileBytes(const std::string& p, std::vector<uint8_t>& out) {
@@ -43,7 +47,10 @@ bool loadDir(const std::string& dir) {
 
     std::vector<std::pair<int, int>> pos;
     {
-        FILE* f = fopen(combinePath(dir, "pos.txt").c_str(), "r");
+        // 手动指定了 pos.txt 优先用它的；没有或打不开就回退到目录内 pos.txt
+        FILE* f = nullptr;
+        if (!gPosPath.empty()) f = fopen(gPosPath.c_str(), "r");
+        if (!f) f = fopen(combinePath(dir, "pos.txt").c_str(), "r");
         int a, b;
         while (f && fscanf(f, "%d %d", &a, &b) == 2) pos.push_back({a, b});
         if (f) fclose(f);
@@ -87,6 +94,14 @@ void saveAllToDir(const std::string& dir) {
 
 bool writeSpkToDir(const std::string& dir) {
     size_t n = gFrames.size();
+
+    // 文件名：空则默认 sprites；用户没带 .spk 后缀就补上，带了就按用户的来
+    std::string name = gSpkName;
+    if (name.empty()) name = "sprites";
+    bool hasExt = name.size() >= 4 && (name.compare(name.size() - 4, 4, ".spk") == 0 ||
+                                       name.compare(name.size() - 4, 4, ".SPK") == 0);
+    if (!hasExt) name += ".spk";
+
     uint64_t header = 4 + (uint64_t)n * sizeof(SpriteEntry);
     uint64_t cur = header;
     std::vector<SpriteEntry> ent(n);
@@ -101,7 +116,7 @@ bool writeSpkToDir(const std::string& dir) {
         ent[i].offset = cur;
         cur += fr.rgba.size();
     }
-    FILE* f = fopen(combinePath(dir, "sprites.spk").c_str(), "wb");
+    FILE* f = fopen(combinePath(dir, name).c_str(), "wb");
     if (!f) return false;
     uint32_t total = (uint32_t)n;
     fwrite(&total, 4, 1, f);
